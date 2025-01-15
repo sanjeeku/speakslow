@@ -18,7 +18,7 @@ SAMPLE_RATE = 16000
 CHUNK = 1024
 
 # Speech rate parameters
-ROLLING_WINDOW_SIZE = 30  # Number of seconds to keep in rolling buffer
+ROLLING_WINDOW_SIZE = 10  # Number of seconds to keep in rolling buffer
 WORDS_PER_MINUTE_THRESHOLD = 180
 
 # Stammering parameters
