@@ -5,9 +5,12 @@ import threading
 import tkinter as tk
 from collections import deque
 import json
+from datetime import datetime
 
 import pyaudio
 from vosk import Model, KaldiRecognizer
+import pathlib
+from pathlib import Path
 
 # --------------------------------------------------
 # Configuration
@@ -28,10 +31,17 @@ STAMMER_REPEAT_THRESHOLD = 2  # repeated words
 GARBLED_CONFIDENCE_THRESHOLD = 0.6  # Adjust as needed
 
 # --------------------------------------------------
+# Logging Configuration
+# --------------------------------------------------
+LOGS_DIR = Path("logs")
+log_file = None  # Will be set in main()
+
+# --------------------------------------------------
 # Global Variables
 # --------------------------------------------------
 audio_queue = queue.Queue()  # Thread-safe queue to hold audio data
 running = True
+log_file_handle = None  # Global file handle for logging
 
 # Rolling buffer to store (word, timestamp)
 word_timestamp_deque = deque()
@@ -154,7 +164,7 @@ def recognition_thread(gui_callback):
     Pulls audio data from audio_queue, feeds into Vosk recognizer,
     and calls 'gui_callback' to update the UI with recognized text / alerts.
     """
-    global running
+    global running, log_file_handle
 
     if not os.path.exists(MODEL_PATH):
         gui_callback("[ERROR] Vosk model path not found. Check MODEL_PATH.", alert=True)
@@ -181,6 +191,8 @@ def recognition_thread(gui_callback):
 
             if display_text.strip():
                 now = time.time()
+                timestamp = datetime.fromtimestamp(now).strftime('%Y-%m-%d %H:%M:%S')
+                
                 for w in plain_words:
                     word_timestamp_deque.append((w, now))
 
@@ -189,6 +201,11 @@ def recognition_thread(gui_callback):
 
                 message = f"Recognized: {display_text}\n"
                 message += f"Rolling WPM: {wpm:.2f}\n"
+
+                # Log the transcript with timestamp using the global file handle
+                if log_file_handle:
+                    log_file_handle.write(f"[{timestamp}] {display_text}\n")
+                    log_file_handle.flush()  # Ensure it's written to disk
 
                 alert_messages = []
                 if wpm > WORDS_PER_MINUTE_THRESHOLD:
@@ -247,8 +264,13 @@ class SpeechMonitorGUI:
         self.root.mainloop()
 
     def on_close(self):
-        global running
+        global running, log_file_handle
         running = False
+        
+        # Close the log file handle
+        if log_file_handle:
+            log_file_handle.close()
+            
         self.root.quit()
         self.root.destroy()
 
@@ -271,6 +293,21 @@ class SpeechMonitorGUI:
 # Main Function
 # --------------------------------------------------
 def main():
+    global log_file_handle
+    
+    # Create logs directory if it doesn't exist
+    LOGS_DIR.mkdir(exist_ok=True)
+    
+    # Create log file with timestamp
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    log_file_path = LOGS_DIR / f"speech_transcript_{timestamp}.txt"
+    
+    # Open the log file and keep the handle
+    log_file_handle = open(log_file_path, 'w', encoding='utf-8')
+    log_file_handle.write(f"Speech Recognition Log - Started at {timestamp}\n")
+    log_file_handle.write("=" * 50 + "\n\n")
+    log_file_handle.flush()
+
     gui = SpeechMonitorGUI()
 
     # Start audio capture thread
